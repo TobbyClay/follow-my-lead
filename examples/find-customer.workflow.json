@@ -4,14 +4,15 @@
   "id": "find-customer",
   "revision": 1,
   "name": "Find a customer",
-  "goal": "Search the practice directory for the requested customer and verify exactly one result.",
-  "learning": { "method": "example", "reviewed": true, "assumptions": ["The search term identifies exactly one customer."] },
+  "goal": "Find exactly one customer and verify that the result is the requested customer.",
+  "learning": { "method": "example", "reviewed": true, "summary": "Search the directory using the supplied customer name, check that exactly one result appears, and confirm the displayed customer's name contains that input.", "demonstrationInputs": { "customerName": "Maya" }, "assumptions": ["The search term identifies exactly one customer."] },
   "contexts": { "main": { "adapter": "browser", "origin": "http://127.0.0.1:8765" } },
   "inputs": { "customerName": { "type": "string", "description": "Customer name", "default": "Maya", "required": true } },
   "steps": [
     { "id": "open-directory", "context": "main", "action": "navigate", "url": "http://127.0.0.1:8765/" },
     { "id": "enter-name", "context": "main", "action": "fill", "target": { "description": "Customer name", "locators": [{ "kind": "label", "value": "Customer name" }, { "kind": "css", "value": "#customer-name" }] }, "value": { "input": "customerName" } },
     { "id": "search", "context": "main", "action": "click", "target": { "description": "Search", "locators": [{ "kind": "role", "role": "button", "value": "Search" }] } },
-    { "id": "verify-result", "context": "main", "action": "assertText", "target": { "description": "Result count", "locators": [{ "kind": "css", "value": "#result-count" }] }, "value": "1 customer found", "match": "equals", "timeoutMs": 8000 }
+    { "id": "verify-count", "context": "main", "action": "assertText", "target": { "description": "Result count", "locators": [{ "kind": "css", "value": "#result-count" }] }, "value": "1 customer found", "match": "equals", "timeoutMs": 8000 },
+    { "id": "verify-customer", "context": "main", "action": "assertText", "target": { "description": "Result customer name", "locators": [{ "kind": "css", "value": "#customers h4" }] }, "value": { "input": "customerName" }, "match": "contains", "timeoutMs": 8000 }
   ]
 }

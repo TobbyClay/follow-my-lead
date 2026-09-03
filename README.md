@@ -14,7 +14,11 @@ A demonstration is the starting point; users can correct inferred steps and defi
 
 ## Current status
 
-The first Chrome prototype is implemented: a Manifest V3 extension records demonstrations, drafts and edits parameterized workflows, imports AI-authored workflows, and replays them with a final success check. A project skill lets Codex interpret recordings using the host's model. The extension itself makes no AI API calls.
+The Chrome prototype now preserves manual and action-driven navigation, suggests reusable inputs from observed controls, compares two demonstrations, and explains what was learned before review. It imports AI-authored workflows and replays reviewed tasks with explicit outcome checks. A project skill lets Codex interpret recordings using the host's model. The extension itself makes no AI API calls.
+
+Learning is website-independent: there are no customer-directory-specific rules in the recorder or learner. Each task is taught against its own website and controls. This does not mean every website or browser capability is supported; see the compatibility limits below.
+
+Structural validity, user review, a passing run, and verified transfer are separate. A task earns **Verified** only when a different-input test passes independent outcome checks tied to those changed inputs. Verification belongs to that saved revision; edits require a new test, and imported JSON cannot claim verification.
 
 The code is verified with local DOM and simulated Chrome-transport tests. Installation, permissions, and real-site behavior still need a live Chrome check. Automatic model recovery inside the extension remains future work.
 
@@ -23,12 +27,14 @@ The code is verified with local DOM and simulated Chrome-transport tests. Instal
 1. In Chrome, open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**, and select this project's `extension` folder.
 2. In a terminal in this project, run `npm run demo` (or `npm.cmd run demo` in PowerShell). Node.js 22+ is required for the practice server; the extension itself needs no Node installation.
 3. Open [the local practice directory](http://127.0.0.1:8765/). Open Follow My Lead from Chrome's extension button.
-4. Name the task **Find a customer** and describe the goal: **Search for the requested customer and show exactly one result**. Start teaching and allow access to this local site.
-5. Search for **Maya**. Reopen the extension, choose **Mark success**, and click **1 customer found** on the page. Use the recording banner's **Stop** button or reopen the extension and stop.
-6. Choose **Create local draft**. On the recorded fill step, enable **Change this value on each run** and name the input `customerName`. Review the final success check, check the review box, and save.
-7. Under the saved task, change the input to **Noah**, then run it. The extension opens a new tab, performs the task, and verifies the result.
+4. Name the task **Find a customer** and describe the goal: **Find exactly one result and confirm it is the requested customer**. Start teaching and allow access to this local site.
+5. Search for **Maya**. Reopen the extension, choose **Mark success**, and click **1 customer found**. Use **Mark success** again and click the returned customer's name, **Maya Chen**. Stop recording.
+6. Choose **Create local draft**. Accept the suggested **Customer name** input and its linked result check; rename it if desired. Review **What I learned**, expand the individual steps if needed, check the review box, and save.
+7. Under the saved task, change the input to **Noah**, then choose **Test with different input**. The extension opens a new tab and checks both the result count and the requested name before verifying the saved revision.
 
-For a quick replay-only check, import `examples/find-customer.workflow.json`, review it, save it, and run with Maya or Noah. A name that does not exist should fail the final assertion.
+Optionally record the task again with another input and select it under **Compare with a second demonstration** before drafting. Matching paths expose changing fields and likely fixed settings; different paths remain review gaps rather than inferred branches.
+
+For a quick replay-only check, import `examples/find-customer.workflow.json`, review it, save it, and run with Maya or Noah. A missing or wrong customer fails the outcome checks, even if a generic count looks correct. A normal run does not create new transfer-verification evidence.
 
 **Expand** opens a larger workspace for editing. Start a recording from the extension popup on the target website so Chrome can grant it access to that tab. Keep Chrome and the practice server open while replaying the local example.
 
@@ -38,8 +44,8 @@ The local draft builder organizes events; it does not interpret them with a mode
 
 1. Stop recording and choose **Export for AI**. Review the exported file if it contains private business data.
 2. In this Codex project, invoke `$follow-my-lead`, attach the `.recording.json`, and explain what should vary between runs. **Copy teaching prompt** provides a starting prompt.
-3. The skill interprets the evidence, identifies inputs and assumptions, and writes a validated workflow to `workflows/`.
-4. Import the `.workflow.json` into the extension, review it, and run.
+3. The skill interprets the evidence, identifies inputs and assumptions, explains the learned rules, and writes a validated workflow to `workflows/`. Attach both recordings when asking for comparison.
+4. Import the `.workflow.json`, review its teach-back and input-linked outcomes, then test it with a different input. The AI explanation is distinct from a verified browser run.
 
 For an adaptive run, invoke the skill in a host with a connected browser and ask it to run the task. The AI can inspect changes and adapt there, subject to its available tools and usage limits. A skill alone does not connect to local Chrome. For Codex's browser connection, use **Settings → Computer use**; that ChatGPT browser extension is separate from the Follow My Lead recorder.
 
@@ -47,7 +53,9 @@ With Codex signed in through ChatGPT, model use follows the subscription. Record
 
 ## Scope of this pilot
 
-Supported: one website origin, one top-level tab, standard HTML inputs and selects, checkboxes, clicks, simple Enter submission, page navigation within the site, and text/value assertions. The recorder observes interaction events and page structure; continuous screen/video recording is not included.
+Supported on ordinary HTTP(S) websites: one website origin per workflow, one top-level tab, standard HTML inputs and selects, checkboxes, clicks, simple Enter submission, manual visits/reloads, action-driven page transitions (including observed history/hash changes), query-parameter inputs, and text/value assertions. Chrome's navigation permission observes navigation only for the actively recorded top-level tab; site content still requires per-host permission. The recorder observes interaction events and page structure; continuous screen/video recording is not included.
+
+Unknown navigation causes and missing transitions block local-draft replay until reviewed. Leaving the approved site or opening a new tab stops recording with a gap. Dynamic URL path inputs, templates, cross-site workflows, and general branching/loops are not implemented. Changed-input verification currently needs string-based independent result assertions; boolean-only tasks need additional outcome capabilities before they can earn that verification label.
 
 The adapter dispatches DOM interactions. Sites requiring trusted OS input, embedded cross-origin frames, shadow DOM controls, canvas interfaces, native file dialogs, or new-tab flows may need a different browser driver. Such compatibility has not been established. Keep authentication outside recordings; detected sensitive fields are excluded, and resulting learning gaps block replay.
 
@@ -63,6 +71,8 @@ node scripts/fml.mjs validate examples/find-customer.workflow.json
 ```
 
 Runtime extension code has no third-party dependencies. `jsdom` is a development dependency for testing. Test coverage includes recording/replay with a changed input, outcome failures, ambiguity, sensitive values, cancellation, worker orchestration and interruption, and skill export. These are not substitutes for live Chrome testing.
+
+`npm run preview` serves the review UI at `http://127.0.0.1:8766/` with fictional demonstrations and an explicitly simulated storage transport. It cannot record, replay, or earn verification; use it only for interface development. Real extension testing still requires loading the `extension` directory in Chrome. Reload an existing installation for version 0.2 and review Chrome's new navigation-permission prompt.
 
 Useful commands:
 

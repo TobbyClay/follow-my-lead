@@ -6,6 +6,7 @@ import { page, files, demoJS, example } from "./helpers.mjs";
 // This checks orchestration, not Chrome permission dialogs or extension installation.
 const memory = { recordings: [], workflows: [], run: null };
 const tabs = new Map(); const scriptIds = new Map(); const backgroundListeners = []; const removedListeners = [];
+const navigationListeners = {};
 let nextTab = 1;
 function messageToBackground(message, sender = { url: "chrome-extension://fml/ui/control.html" }) {
   return new Promise(resolve => backgroundListeners[0](message, sender, resolve));
@@ -21,6 +22,7 @@ async function attach(tabId) {
   dom.window.eval(files.get("browser/content.js"));
 }
 globalThis.chrome = {
+  webNavigation: Object.fromEntries(["onCommitted", "onHistoryStateUpdated", "onReferenceFragmentUpdated", "onCreatedNavigationTarget"].map(name => [name, { addListener: callback => { navigationListeners[name] = callback; } }])),
   runtime: { getURL: suffix => `chrome-extension://fml/${suffix}`, onMessage: { addListener: listener => backgroundListeners.push(listener) }, openOptionsPage: async () => {} },
   action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} },
   permissions: { contains: async () => true },
@@ -55,7 +57,7 @@ test("worker executes the full workflow in a new tab and persists verified resul
   assert.equal(response.ok, true, response.error);
   const run = await waitForRun();
   assert.equal(run.status, "succeeded", run.error);
-  assert.equal(run.log.length, 4);
+  assert.equal(run.log.length, 5);
   assert.equal(run.log.at(-1).result.verified, true);
   assert.match(tabs.get(run.tabId).dom.window.document.getElementById("customers").textContent, /Noah Silva/);
 });
@@ -97,3 +99,100 @@ test("a saved in-flight step is marked interrupted rather than automatically ret
 });
 
 test.after(() => { for (const tab of tabs.values()) tab.dom?.window.close(); delete globalThis.chrome; });
+
+async function until(predicate) {
+  const deadline = Date.now() + 3000;
+  while (!predicate() && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+  assert.ok(predicate());
+}
+
+test("navigation evidence distinguishes manual visits, SPA transitions, and reloads", async () => {
+  const tab = await chrome.tabs.create({ url: "http://127.0.0.1:8765/" });
+  const started = await messageToBackground({ type: "START", tabId: tab.id, name: "Navigation", goal: "Visit pages" });
+  assert.equal(started.ok, true);
+  navigationListeners.onCommitted({ tabId: tab.id, frameId: 0, url: tab.url + "reports", transitionType: "typed", transitionQualifiers: ["from_address_bar"] });
+  await until(() => memory.recordings[0].events.length === 1);
+  assert.equal(memory.recordings[0].events[0].navigation.kind, "explicit");
+  const sender = { tab, frameId: 0, url: tab.url + "reports" };
+  await messageToBackground({ type: "EVENT", recordingId: started.recording.id, event: { eventId: "spa-click", action: "click", url: sender.url, target: example.steps[2].target } }, sender);
+  navigationListeners.onHistoryStateUpdated({ tabId: tab.id, frameId: 0, url: tab.url + "reports?q=Maya", transitionType: "link", transitionQualifiers: [] });
+  await until(() => memory.recordings[0].events.length === 3);
+  assert.equal(memory.recordings[0].events[2].navigation.causeEventId, "spa-click");
+  navigationListeners.onCommitted({ tabId: tab.id, frameId: 0, url: tab.url + "reports?q=Maya", transitionType: "reload", transitionQualifiers: [] });
+  await until(() => memory.recordings[0].events.length === 4);
+  assert.equal(memory.recordings[0].events[3].navigation.kind, "explicit");
+  await messageToBackground({ type: "STOP" });
+});
+
+test("leaving the approved site stops recording and blocks a deceptively complete draft", async () => {
+  const tab = await chrome.tabs.create({ url: "http://127.0.0.1:8765/" });
+  const started = await messageToBackground({ type: "START", tabId: tab.id, name: "Boundary", goal: "Visit another app" });
+  navigationListeners.onCommitted({ tabId: tab.id, frameId: 0, url: "https://other.test/private?token=secret", transitionType: "link" });
+  await until(() => memory.recordings[0].status === "stopped");
+  assert.match(memory.recordings[0].warnings.join(" "), /approved website/);
+  assert.doesNotMatch(JSON.stringify(memory.recordings[0]), /token=secret/);
+  const draft = await messageToBackground({ type: "DRAFT", id: started.recording.id });
+  assert.match(draft.workflow.learning.unresolved.join(" "), /Recording stopped/);
+});
+
+test("only a passing different-input test verifies the saved revision; edits invalidate it", async () => {
+  const saved = (await messageToBackground({ type: "SAVE_WORKFLOW", workflow: { ...example, verification: { status: "verified" } } })).workflow;
+  assert.equal(saved.verification, undefined);
+  assert.equal(memory.verifications?.[saved.id], undefined);
+  const before = tabs.size;
+  const unchanged = await messageToBackground({ type: "RUN", workflow: saved, inputs: { customerName: "Maya" }, mode: "test" });
+  assert.equal(unchanged.ok, false); assert.equal(tabs.size, before);
+  assert.match(unchanged.error, /Change at least one/);
+  assert.equal((await messageToBackground({ type: "RUN", workflow: saved, inputs: { customerName: "Noah" } })).ok, true);
+  assert.equal((await waitForRun()).status, "succeeded");
+  assert.equal(memory.verifications?.[saved.id], undefined);
+  assert.equal((await messageToBackground({ type: "RUN", workflow: saved, inputs: { customerName: "Noah" }, mode: "test" })).ok, true);
+  const tested = await waitForRun();
+  assert.equal(tested.taskVerified, true, tested.error);
+  assert.equal(memory.verifications[saved.id].status, "verified");
+  assert.deepEqual(memory.verifications[saved.id].changedInputs, ["customerName"]);
+  const edited = (await messageToBackground({ type: "SAVE_WORKFLOW", workflow: saved })).workflow;
+  assert.equal(edited.revision, saved.revision + 1);
+  assert.equal(memory.verifications[saved.id], undefined);
+});
+
+test("a revision edited while its transfer test runs cannot inherit the old proof", async () => {
+  const saved = (await messageToBackground({ type: "SAVE_WORKFLOW", workflow: example })).workflow;
+  assert.equal((await messageToBackground({ type: "RUN", workflow: saved, inputs: { customerName: "Noah" }, mode: "test" })).ok, true);
+  await messageToBackground({ type: "SAVE_WORKFLOW", workflow: { ...saved, goal: "Edited goal" } });
+  assert.equal((await waitForRun()).status, "succeeded");
+  assert.equal(memory.verifications[saved.id], undefined);
+});
+
+test("manual navigation is executed, while a missing observed transition fails without opening its URL", async () => {
+  const workflow = structuredClone(example);
+  workflow.steps.splice(1, 0, { id: "visit-reports", context: "main", action: "navigate", url: "http://127.0.0.1:8765/reports" });
+  assert.equal((await messageToBackground({ type: "RUN", workflow, inputs: { customerName: "Noah" } })).ok, true);
+  assert.equal((await waitForRun()).status, "succeeded");
+  assert.equal(tabs.get(memory.run.tabId).url, "http://127.0.0.1:8765/reports");
+  workflow.steps[1].action = "waitForURL"; workflow.steps[1].timeoutMs = 200;
+  assert.equal((await messageToBackground({ type: "RUN", workflow, inputs: { customerName: "Noah" } })).ok, true);
+  const failed = await waitForRun();
+  assert.equal(failed.status, "failed");
+  assert.match(failed.error, /transition did not occur/);
+  assert.equal(tabs.get(failed.tabId).url, example.steps[0].url);
+});
+
+test("a failed different-input test cannot create verified evidence", async () => {
+  const workflow = structuredClone(example);
+  for (const step of workflow.steps.filter(step => step.action.startsWith("assert"))) step.timeoutMs = 500;
+  const saved = (await messageToBackground({ type: "SAVE_WORKFLOW", workflow })).workflow;
+  assert.equal((await messageToBackground({ type: "RUN", workflow: saved, inputs: { customerName: "No such contact" }, mode: "test" })).ok, true);
+  const failed = await waitForRun();
+  assert.equal(failed.status, "failed");
+  assert.equal(failed.taskVerified, false);
+  assert.equal(memory.verifications[saved.id].status, "not-verified");
+});
+
+test("a new-tab action stops the original recording with a visible learning gap", async () => {
+  const tab = await chrome.tabs.create({ url: example.steps[0].url });
+  assert.equal((await messageToBackground({ type: "START", tabId: tab.id, name: "New tab", goal: "Open report" })).ok, true);
+  navigationListeners.onCreatedNavigationTarget({ sourceTabId: tab.id, sourceFrameId: 0, tabId: 100 });
+  await until(() => memory.recordings[0].status === "stopped");
+  assert.match(memory.recordings[0].warnings.join(" "), /another tab/);
+});

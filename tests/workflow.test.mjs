@@ -13,7 +13,7 @@ test("a reusable example resolves a new input without changing its saved definit
 });
 test("invalid workflows fail before any browser action", () => {
   const cases = [
-    [workflow => workflow.steps.pop(), /success assertion/],
+    [workflow => workflow.steps.splice(-2), /success assertion/],
     [workflow => workflow.steps[0].url = "javascript:alert(1)", /navigation/],
     [workflow => workflow.steps[0].url = "https://elsewhere.test/", /origin/],
     [workflow => workflow.steps[1].value = { input: "missing" }, /Unknown input/],
@@ -45,4 +45,11 @@ test("prototype-like keys cannot become input identifiers", () => {
   const workflow = clone(example);
   workflow.inputs = JSON.parse('{"__proto__":{"type":"string","default":"bad"}}');
   assert.match(validateBrowserRun(workflow).join(" "), /Invalid input/);
+});
+
+test("malformed learning metadata is rejected as validation errors", () => {
+  for (const learning of [{ unresolved: "a string" }, { comparison: { compatible: true, reason: "test", changed: "wrong", fixed: [] } }, { assumptions: [null] }, { demonstrationInputs: { customerName: false } }]) {
+    const workflow = clone(example); workflow.learning = learning;
+    assert.ok(validateBrowserRun(workflow).length > 0);
+  }
 });

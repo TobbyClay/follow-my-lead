@@ -4,6 +4,10 @@ Status: Chrome prototype implemented, 2026-09-03. This document describes the br
 
 The pilot uses a Chrome extension, a portable core in `extension/core/`, and a DOM adapter in `extension/browser/`. Its service worker coordinates recording and replay and persists action intent before dispatch. AI learning is supplied by the host through the project skill. There is no direct model API backend or automatic model recovery in the extension.
 
+Version 0.2 adds a website-independent learning helper for input suggestions, comparison of demonstrations, and teach-back. The worker records top-level navigation causes using Chrome's navigation events: explicit visits become navigation actions, caused transitions become URL checkpoints, and missing evidence remains a review gap. Query input bindings replace changing query values without altering a workflow's approved origin.
+
+The worker stores transfer-test evidence separately from imported workflow data. A content fingerprint and revision bind proof to the exact saved definition. Tests must change a used input and verify an independent result linked to each changed input. Passing a normal run, importing a claimed status, or checking the review box cannot create transfer proof; saving a revision invalidates it. UI-preview and simulated-transport checks are not live Chrome evidence.
+
 ## One core with environment adapters
 
 The core owns the teaching and execution process. The browser adapter supplies observations and performs actions in Chrome, keeping browser-specific operations separate from workflow data and input logic.
@@ -111,3 +115,4 @@ Record only during a visible teaching session. Keep recordings and run artifacts
 
 - [Chrome activeTab permissions](https://developer.chrome.com/docs/extensions/develop/concepts/activeTab)
 - [Chrome content scripts](https://developer.chrome.com/docs/extensions/reference/manifest/content-scripts)
+- [Chrome navigation events and transition types](https://developer.chrome.com/docs/extensions/reference/api/webNavigation)

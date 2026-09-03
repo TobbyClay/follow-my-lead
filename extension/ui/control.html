@@ -21,29 +21,34 @@
       </section>
       <section class="card"><div class="section-head"><span class="number">02</span><h2>Learn & review</h2></div>
         <label for="recordings">Demonstration</label><select id="recordings"></select>
+        <label for="comparison">Compare with a second demonstration (optional)</label><select id="comparison"></select>
         <div class="actions"><button id="draft">Create local draft</button><button id="export-recording">Export for AI</button><button id="copy-prompt">Copy teaching prompt</button></div>
         <p class="hint">A local draft organizes the recorded actions. For AI interpretation, attach the exported recording in Codex and use <b>$follow-my-lead</b>. Import its workflow below.</p>
         <div class="import-row"><label class="file-button" for="import-workflow">Import workflow JSON</label><input id="import-workflow" type="file" accept=".json,application/json"><span id="learning-method" class="subtle"></span></div>
         <div id="editor" hidden>
           <label for="workflow-name">Workflow name</label><input id="workflow-name">
           <label for="workflow-goal">Goal</label><textarea id="workflow-goal" rows="2"></textarea>
-          <p class="hint">Mark a demonstrated value as an input to change it on each run. Review the final success check carefully.</p>
-          <ol id="steps" class="steps"></ol>
+          <section class="learning-panel" aria-labelledby="suggestions-title"><h3 id="suggestions-title">Suggested reusable inputs</h3><p class="hint">Suggestions come from the observed controls, on any supported website. Accept, rename, or keep each value fixed.</p><div id="input-suggestions"></div></section>
+          <p id="comparison-result" class="hint"></p>
+          <p class="hint">Link result checks to the requested input—not only to a count or the field you filled. You can adjust every step below.</p>
+          <section class="learning-panel" aria-labelledby="teach-back-title"><h3 id="teach-back-title">What I learned</h3><div id="teach-back"></div></section>
+          <details><summary>Review or edit individual steps</summary><ol id="steps" class="steps"></ol></details>
           <div id="validation" class="validation" role="status"></div>
           <label class="check-row"><input id="reviewed" type="checkbox"> I reviewed the steps, inputs, and success check.</label>
           <div class="actions"><button id="save" class="primary">Save task</button><button id="export-workflow">Export workflow</button></div>
           <details><summary>Edit workflow JSON</summary><textarea id="json-editor" rows="12" spellcheck="false" aria-label="Workflow JSON"></textarea><button id="apply-json">Apply JSON</button></details>
         </div>
       </section>
-      <section class="card run-card"><div class="section-head"><span class="number">03</span><h2>Run a learned task</h2><span class="badge">No API key</span></div>
+      <section class="card run-card"><div class="section-head"><span class="number">03</span><h2>Run a learned task</h2><span id="verification-status" class="badge">Not tested</span></div>
         <label for="workflows">Saved task</label><select id="workflows"></select>
         <div id="run-inputs"></div>
-        <div class="actions"><button id="run" class="primary">Run in a new tab →</button><button id="edit-saved">Edit task</button><button id="stop-run">Stop run</button></div>
+        <div class="actions"><button id="test-run" class="primary">Test with different input</button><button id="run">Run in a new tab →</button><button id="edit-saved">Edit task</button><button id="stop-run">Stop run</button></div>
+        <p id="test-guidance" class="hint">Change an input from the demonstration, then test its actual result. Only a passing different-input test verifies this revision.</p>
         <p class="hint">Replay uses your current Chrome sign-in and saved instructions. It checks the result and stops on an unexpected state. Automatic AI recovery is not enabled.</p>
         <div id="run-result" role="status" aria-live="polite"></div>
       </section>
     </div>
-    <footer>Local recording · Reusable inputs · Verified outcomes <span>0.1 / Chrome pilot</span></footer>
+    <footer>Site-independent learning · Local replay · No API key <span>0.2 / Chrome pilot</span></footer>
   </main>
   <script type="module" src="control.js"></script>
 </body>

@@ -39,7 +39,7 @@
     if (label(element)) locators.push({ kind: "label", value: label(element) });
     if (role(element) && name(element)) locators.push({ kind: "role", role: role(element), value: name(element) });
     locators.push({ kind: "css", value: selector(element) });
-    return { description: name(element) || element.tagName.toLowerCase(), tag: element.tagName.toLowerCase(), locators };
+    return { description: name(element) || element.getAttribute("name") || element.tagName.toLowerCase(), tag: element.tagName.toLowerCase(), inputType: element.type || "", name: element.getAttribute("name") || "", locators };
   }
   function resolve(target) {
     let ambiguous = false;

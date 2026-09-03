@@ -3,7 +3,11 @@
   globalThis.FMLContent = true;
   const dom = globalThis.FMLDOM;
   let recorder, recordingId, cancelled = false, hud, pending = Promise.resolve();
-  const send = message => chrome.runtime.sendMessage(message);
+  const send = async message => {
+    const result = await chrome.runtime.sendMessage(message);
+    if (result?.ok === false) throw new Error(result.error || "Recording evidence was not saved.");
+    return result;
+  };
   function banner(text) {
     hud?.remove(); hud = document.createElement("div"); hud.dataset.fmlUi = "true";
     hud.setAttribute("role", "status");
@@ -85,7 +89,13 @@
     })().then(result => reply({ ok: true, ...result })).catch(error => reply({ ok: false, error: error.message }));
     return true;
   });
-  void send({ type: "READY", observation: dom.observe() }).then(result => {
-    if (result?.recordingId) record(result.recordingId);
-  }).catch(() => {});
+  function reconnect() {
+    const previousId = recordingId;
+    void send({ type: "READY", observation: dom.observe() }).then(result => {
+      if (result?.recordingId) record(result.recordingId);
+      else if (recordingId === previousId) { recorder?.stop(); recordingId = null; hud?.remove(); }
+    }).catch(() => {});
+  }
+  addEventListener("pageshow", event => { if (event.persisted) reconnect(); });
+  reconnect();
 })();

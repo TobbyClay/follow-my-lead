@@ -14,6 +14,8 @@ Acceptance: the core can describe supported browser workflows and reject unavail
 
 Implemented: extension recording, success markers, draft editing, reusable inputs, workflow import/export, a project skill for AI interpretation, and local replay with assertions. Local DOM and simulated transport tests pass. The current adapter uses synthetic DOM events and supports one origin and top-level tab. No direct AI API calls or browser model recovery are implemented.
 
+Version 0.2 implements manual-versus-caused navigation, SPA URL checkpoints, suggested input and outcome bindings, changing query parameters, a two-demonstration comparison, plain-language teach-back, and revision-bound verification after a different-input test. Regression fixtures cover customer lookup and an unrelated schedule/date workflow; broad real-site compatibility is still unproven.
+
 Remaining acceptance: load in Chrome, check permission/navigation behavior, then teach and verify a real user task. The required ChatGPT browser connection was unavailable during implementation; live extension testing is not yet claimed.
 
 Choose one short, repeatable Chrome workflow with an observable outcome. A test web page with a search field and results is an appropriate initial fixture; a real user workflow should follow.

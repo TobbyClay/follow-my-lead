@@ -36,6 +36,9 @@
     onInput(event) {
       if (!this.accepts(event)) return;
       const element = event.target;
+      if (element.isContentEditable || element.hasAttribute("contenteditable") || event.composedPath?.()[0] !== element) {
+        this.flush(); this.send("unsupported", element, { reason: "An editable or shadow-DOM control is not supported by this recorder. Resolve this step before replay." }); return;
+      }
       if (!["INPUT", "TEXTAREA"].includes(element.tagName) || ["checkbox", "radio", "file", "hidden"].includes(element.type)) return;
       if (this.pending && this.pending.element !== element) this.flush();
       // Sensitive values never enter the pending buffer.
@@ -45,7 +48,8 @@
     onChange(event) {
       if (!this.accepts(event)) return;
       const element = event.target;
-      if (element.tagName === "SELECT") { this.flush(); this.send("select", element, { value: element.value }); }
+      if (element.type === "file") { this.flush(); this.send("unsupported", element, { reason: "A native file selection needs a supported file-input adapter before replay." }); }
+      else if (element.tagName === "SELECT") { this.flush(); this.send("select", element, { value: element.value }); }
       else if (["checkbox", "radio"].includes(element.type)) { this.flush(); this.send("check", element, { value: element.checked }); }
       else this.flush();
     }

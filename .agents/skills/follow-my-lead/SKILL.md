@@ -15,9 +15,17 @@ Read the supplied `.recording.json`, including its goal, initial page context, e
 
 Infer the intended operation and distinguish changing inputs from fixed settings. Preserve application context and causal order. Collapse intermediate typing into final field values and omit incidental clicks only when the evidence supports doing so. Describe decision rules and assumptions in `learning`; do not claim that one demonstration establishes unseen branches.
 
+Keep the learning website-independent: infer controls and rules from the supplied evidence, not the practice directory's names or selectors. When two demonstrations are supplied, compare their paths and changing values. Values that stay constant are candidates for fixed settings, not proof of a universal rule. Different paths require explicit review rather than invented branching.
+
+Preserve every meaningful navigation. Use `navigate` for explicit/manual visits and `waitForURL` for transitions caused by recorded actions. A missing navigation cause is a learning gap; do not silently drop the transition or replay a submission twice. Bind changing URL query values with `queryInputs` where supported.
+
 Identify the observable result that proves the task succeeded. Use recorded success markers when appropriate, adapting example-specific values into input references or a stable result condition. If a missing branch, excluded sensitive field, or absent result makes correctness uncertain, state the specific gap and request only the needed clarification. The host can inspect a connected browser to resolve gaps when that is within the user's request.
 
+For input-dependent goals, check an independent result against the requested input. A generic count or checking the field just filled cannot establish that the requested record was found. Keep result locators independent of the demonstrated value; explain gaps when the page does not expose a sufficient result check.
+
 Create a version 1 workflow using semantic locators from the evidence, named inputs, and a final assertion. Set `learning.method` to `codex-skill`, record assumptions and unresolved gaps, and set `learning.reviewed` to false for a newly learned draft. Save it to `workflows/<task-id>.workflow.json` in this project, creating that directory as needed. Validate it with the CLI. Report structural validation separately from a verified browser run.
+
+Include a short `learning.summary`, `learning.assumptions`, `learning.decisionRules`, and `learning.demonstrationInputs` mapping input names to their observed values. Explain the steps, changing inputs, and expected result before the user reviews the task. Newly learned or edited workflows are unverified: a different-input test must pass its independent, input-linked result checks before claiming demonstrated transfer. Report which input and path were tested; do not claim universal compatibility. The extension stores its own revision-bound test evidence and ignores verification claims imported in workflow JSON.
 
 The user can import the file into Follow My Lead, review it, and replay it with new inputs. If asked to make the learned task a separate skill, use `node scripts/fml.mjs export-skill <workflow.json> <new-skill-directory>`; the destination must be new. Choose a supported skill location appropriate to the user's requested scope.
 

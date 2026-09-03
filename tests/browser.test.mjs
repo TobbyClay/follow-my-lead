@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { draftWorkflow, materialize, resolveInputs, validateBrowserRun } from "../extension/core/workflow.js";
+import { acceptInput, createTeachingDraft, suggestInputs } from "../extension/core/learning.js";
 import { page, attachContent, enter, demoJS, example } from "./helpers.mjs";
 
 test("record, parameterize, serialize, and replay against a new document with a changed layout", async () => {
@@ -44,8 +45,8 @@ test("record, parameterize, serialize, and replay against a new document with a 
 test("an incorrect result fails its assertion and is not reported as successful", async () => {
   const dom = page(); dom.window.eval(demoJS); const execute = attachContent(dom);
   const inputs = resolveInputs(example, { customerName: "Does not exist" });
-  for (const step of example.steps.slice(1, -1)) assert.equal((await execute({ type: "EXECUTE", step: materialize(step, inputs), origin: dom.window.location.origin })).ok, true);
-  const assertion = { ...example.steps.at(-1), timeoutMs: 500 };
+  for (const step of example.steps.slice(1, 3)) assert.equal((await execute({ type: "EXECUTE", step: materialize(step, inputs), origin: dom.window.location.origin })).ok, true);
+  const assertion = { ...materialize(example.steps[3], inputs), timeoutMs: 500 };
   const result = await execute({ type: "EXECUTE", step: assertion, origin: dom.window.location.origin });
   assert.equal(result.ok, false); assert.match(result.error, /Success check failed/); dom.window.close();
 });
@@ -90,8 +91,55 @@ test("Enter plus the browser's implicit submit click records only one submission
 
 test("stop cancels a waiting assertion", async () => {
   const dom = page(); const execute = attachContent(dom);
-  const pending = execute({ type: "EXECUTE", origin: dom.window.location.origin, step: { ...example.steps.at(-1), timeoutMs: 2000 } });
+  const pending = execute({ type: "EXECUTE", origin: dom.window.location.origin, step: { ...materialize(example.steps.at(-1), resolveInputs(example)), timeoutMs: 2000 } });
   await new Promise(resolve => setTimeout(resolve, 120));
   await execute({ type: "HALT" });
   const result = await pending; assert.equal(result.ok, false); assert.match(result.error, /stopped/); dom.window.close();
+});
+
+test("one wrong customer is not success even when the result count is correct", async () => {
+  const dom = page(); const execute = attachContent(dom);
+  dom.window.document.getElementById("result-count").textContent = "1 customer found";
+  dom.window.document.getElementById("customers").innerHTML = "<article><h4>Maya Chen</h4></article>";
+  const inputs = resolveInputs(example, { customerName: "Noah" });
+  assert.equal((await execute({ type: "EXECUTE", origin: dom.window.location.origin, step: materialize(example.steps[3], inputs) })).ok, true);
+  const result = await execute({ type: "EXECUTE", origin: dom.window.location.origin, step: { ...materialize(example.steps[4], inputs), timeoutMs: 150 } });
+  assert.equal(result.ok, false); assert.match(result.error, /Success check failed/);
+  dom.window.close();
+});
+
+test("a completely different site can teach a date input and replay an independent result", async () => {
+  const html = '<form><label for="from">Start date</label><input id="from" type="date"><button type="submit">Show schedule</button></form><output id="schedule-date"></output>';
+  const url = "https://calendar.example.test/schedule";
+  const setup = () => {
+    const dom = page(html, url);
+    dom.window.document.querySelector("form").onsubmit = event => { event.preventDefault(); dom.window.document.getElementById("schedule-date").textContent = dom.window.document.getElementById("from").value; };
+    return dom;
+  };
+  const first = setup(), events = [];
+  const recorder = new first.window.FMLRecorder(event => events.push(event), { trustedOnly: false });
+  recorder.start(); enter(first.window, first.window.document.getElementById("from"), "2026-09-03");
+  first.window.document.querySelector("button").click();
+  recorder.successMode = true; first.window.document.getElementById("schedule-date").click(); recorder.stop();
+  const workflow = createTeachingDraft({ schemaVersion: 1, kind: "recording", id: "calendar", name: "View schedule", goal: "Show the requested date", startUrl: url, events });
+  acceptInput(workflow, suggestInputs(workflow)[0]);
+  assert.deepEqual(validateBrowserRun(workflow), []);
+  assert.equal(workflow.inputs.startDate.default, "2026-09-03");
+  const second = setup(), execute = attachContent(second);
+  const inputs = resolveInputs(workflow, { startDate: "2026-10-15" });
+  for (const step of workflow.steps.slice(1)) assert.equal((await execute({ type: "EXECUTE", origin: second.window.location.origin, step: materialize(step, inputs) })).ok, true);
+  assert.equal(second.window.document.getElementById("schedule-date").textContent, "2026-10-15");
+  first.window.close(); second.window.close();
+});
+
+test("native file selections and unsupported editable controls produce gaps without recording their values", () => {
+  const dom = page('<input id="attachment" type="file"><div contenteditable="true" id="editor"></div>');
+  const events = [], recorder = new dom.window.FMLRecorder(event => events.push(event), { trustedOnly: false });
+  recorder.start();
+  dom.window.document.getElementById("attachment").dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+  dom.window.document.getElementById("editor").dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  recorder.stop();
+  assert.deepEqual(events.map(event => event.action), ["unsupported", "unsupported"]);
+  assert.ok(events.every(event => !Object.hasOwn(event, "value")));
+  dom.window.close();
 });

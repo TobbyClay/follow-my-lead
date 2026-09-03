@@ -1,11 +1,12 @@
-import { clone, draftWorkflow, httpURL, materialize, resolveInputs, slug, validateBrowserRun } from "./core/workflow.js";
+import { clone, httpURL, materialize, resolveInputs, slug, validateBrowserRun } from "./core/workflow.js";
+import { createTeachingDraft, transferTestPlan, workflowFingerprint } from "./core/learning.js";
 
 const FILES = ["browser/dom.js", "browser/recorder.js", "browser/content.js"];
 let queue = Promise.resolve();
 let running = false;
 let cancelled = false;
 const serial = task => { const next = queue.then(task); queue = next.catch(() => {}); return next; };
-const read = async () => ({ recordings: [], workflows: [], run: null, ...await chrome.storage.local.get(["recordings", "workflows", "run"]) });
+const read = async () => ({ recordings: [], workflows: [], verifications: {}, run: null, ...await chrome.storage.local.get(["recordings", "workflows", "verifications", "run"]) });
 const save = data => chrome.storage.local.set(data);
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const pattern = origin => { const url = new URL(origin); return `${url.protocol}//${url.hostname}/*`; };
@@ -63,7 +64,7 @@ async function start(message) {
   await provision(origin);
   const hello = await ready(tab.id, origin);
   const recording = { schemaVersion: 1, kind: "recording", id: crypto.randomUUID(), name: message.name.trim(), goal: message.goal.trim(),
-    createdAt: new Date().toISOString(), status: "recording", tabId: tab.id, startUrl, origin, events: [], observation: hello.observation, warnings: [] };
+    createdAt: new Date().toISOString(), status: "recording", tabId: tab.id, startUrl, lastUrl: startUrl, origin, events: [], observation: hello.observation, warnings: [] };
   await serial(async () => { const state = await read(); state.recordings.unshift(recording); await save({ recordings: state.recordings.slice(0, 30) }); });
   try { await content(tab.id, { type: "RECORD", recordingId: recording.id }); }
   catch (error) { await stop(); throw error; }
@@ -122,8 +123,53 @@ async function onReady(message, sender) {
   const state = await read();
   const recording = recordingNow(state);
   if (!recording || recording.tabId !== sender.tab?.id || sender.frameId !== 0 || httpURL(sender.url)?.origin !== recording.origin) return {};
-  await appendEvent({ recordingId: recording.id, event: { eventId: crypto.randomUUID(), action: "navigate", at: new Date().toISOString(), url: cleanURL(sender.url), pageTitle: message.observation.title } }, sender);
+  // The navigation API captures manual, document, and SPA transitions. READY is a
+  // fallback for missed events, never evidence that a click caused navigation.
+  if (cleanURL(sender.url) !== (recording.lastUrl || recording.startUrl)) await recordNavigation({ tabId: sender.tab.id, frameId: 0, url: sender.url }, "ready");
   return { recordingId: recording.id };
+}
+
+async function recordNavigation(details, source) {
+  if (details.frameId !== 0) return;
+  return serial(async () => {
+    const state = await read(), recording = recordingNow(state);
+    if (!recording || recording.tabId !== details.tabId) return;
+    if (httpURL(details.url)?.origin !== recording.origin) {
+      recording.status = "stopped";
+      recording.warnings.push("Recording stopped: the tab left its approved website. Split this into site-scoped tasks; no actions on the other site were recorded.");
+      await save({ recordings: state.recordings }); await chrome.action.setBadgeText({ text: "" }); return;
+    }
+    const url = cleanURL(details.url);
+    if (source === "ready" && url === (recording.lastUrl || recording.startUrl)) return;
+    if (recording.events.length >= 500) {
+      recording.status = "stopped"; recording.warnings.push("Recording stopped: the 500-event limit was reached. Split the task.");
+      await save({ recordings: state.recordings }); await chrome.action.setBadgeText({ text: "" }); return;
+    }
+    const qualifiers = details.transitionQualifiers || [];
+    const explicit = ["typed", "auto_bookmark", "generated", "start_page", "reload", "keyword", "keyword_generated"].includes(details.transitionType) || qualifiers.some(item => ["from_address_bar", "forward_back"].includes(item));
+    const previous = recording.events.at(-1);
+    const caused = !explicit && source !== "ready" && ["click", "press", "fill", "select", "check"].includes(previous?.action) && !previous.redacted;
+    const navigation = { source, kind: explicit ? "explicit" : caused ? "observed" : "unknown", transitionType: details.transitionType || "unknown", qualifiers };
+    if (caused) navigation.causeEventId = previous.eventId;
+    recording.events.push({ eventId: crypto.randomUUID(), action: "navigate", at: new Date().toISOString(), url, navigation });
+    recording.lastUrl = url;
+    await save({ recordings: state.recordings });
+  });
+}
+
+async function waitForURL(tabId, step, origin) {
+  const deadline = Date.now() + (step.timeoutMs || 8000);
+  while (Date.now() < deadline) {
+    if (cancelled) throw new Error("Run stopped.");
+    const tab = await chrome.tabs.get(tabId);
+    const url = httpURL(tab.url);
+    if (url && url.origin !== origin) throw new Error("The tab left the workflow’s website.");
+    if (url && cleanURL(url.href) === step.url && tab.status === "complete") {
+      await ready(tabId, origin); return { verified: true, url: step.url };
+    }
+    await pause(100);
+  }
+  throw new Error(`Expected page transition did not occur: ${step.url}. The page was not opened again automatically.`);
 }
 
 async function runWorkflow(message) {
@@ -133,12 +179,17 @@ async function runWorkflow(message) {
   const workflow = clone(message.workflow);
   if (workflow.learning?.reviewed !== true) throw new Error("Review the workflow before running it.");
   const inputs = resolveInputs(workflow, message.inputs);
+  const mode = message.mode === "test" ? "test" : "run";
+  const test = transferTestPlan(workflow, inputs);
+  if (mode === "test" && test.errors.length) throw new Error(test.errors.join(" "));
+  const fingerprint = await workflowFingerprint(workflow);
   const origin = Object.values(workflow.contexts)[0].origin;
   await provision(origin);
   cancelled = false; running = true;
   try {
-    const tab = await chrome.tabs.create({ url: workflow.steps[0].url });
-    const run = { id: crypto.randomUUID(), workflowId: workflow.id, workflowRevision: workflow.revision, status: "running", startedAt: new Date().toISOString(), tabId: tab.id, index: 0, pendingStep: null, log: [] };
+    const first = materialize(workflow.steps[0], inputs);
+    const tab = await chrome.tabs.create({ url: first.url });
+    const run = { id: crypto.randomUUID(), workflowId: workflow.id, workflowRevision: workflow.revision, fingerprint, mode, changedInputs: test.changed, status: "running", startedAt: new Date().toISOString(), tabId: tab.id, index: 0, pendingStep: null, log: [] };
     await save({ run });
     void drive(workflow, inputs, run).finally(() => { running = false; });
     return { run };
@@ -158,8 +209,18 @@ async function drive(workflow, inputs, run) {
       let result;
       if (step.action === "navigate") {
         if (index !== 0) { await chrome.tabs.update(run.tabId, { url: step.url }); await ready(run.tabId, origin); }
-        result = { verified: true, url: step.url };
-      } else result = await content(run.tabId, { type: "EXECUTE", step, origin });
+        result = await waitForURL(run.tabId, step, origin);
+      } else if (step.action === "waitForURL") result = await waitForURL(run.tabId, step, origin);
+      else {
+        try { result = await content(run.tabId, { type: "EXECUTE", step, origin }); }
+        catch (error) {
+          // A document navigation may close the response channel after a click.
+          // Do not repeat the action; only an explicit following URL checkpoint
+          // may establish its effect. The final outcome must still pass.
+          if (!["click", "press"].includes(step.action) || workflow.steps[index + 1]?.action !== "waitForURL" || !/message (port|channel)|receiving end|frame.*removed/i.test(error.message)) throw error;
+          result = { dispatched: true, awaitingNavigationEvidence: true };
+        }
+      }
       if (cancelled) throw new Error("Run stopped.");
       run.log.push({ stepId: step.id, action: step.action, at: new Date().toISOString(), result });
       run.pendingStep = null; await save({ run });
@@ -170,7 +231,17 @@ async function drive(workflow, inputs, run) {
     run.error = error.message;
     if (run.pendingStep && !cancelled) run.error += " The current step was not retried; inspect its result before starting again.";
   }
-  await save({ run });
+  await serial(async () => {
+    const state = await read();
+    const saved = state.workflows.find(item => item.id === workflow.id);
+    if (run.mode === "test" && saved && await workflowFingerprint(saved) === run.fingerprint) {
+      state.verifications ||= {};
+      state.verifications[workflow.id] = { workflowRevision: workflow.revision, fingerprint: run.fingerprint, status: run.status === "succeeded" ? "verified" : "not-verified", runId: run.id, changedInputs: run.changedInputs, testedAt: new Date().toISOString() };
+      await save({ verifications: state.verifications });
+      run.taskVerified = run.status === "succeeded";
+    }
+    await save({ run });
+  });
 }
 
 async function handle(message, sender) {
@@ -182,6 +253,10 @@ async function handle(message, sender) {
     const state = await read();
     if (state.run?.status === "running" && !running) {
       state.run.status = "interrupted"; state.run.error = "The browser worker restarted. Inspect the last step; it has not been retried.";
+      if (state.run.mode === "test" && state.verifications?.[state.run.workflowId]?.workflowRevision === state.run.workflowRevision) {
+        state.verifications[state.run.workflowId].status = "not-verified";
+        await save({ verifications: state.verifications });
+      }
       await save({ run: state.run });
     }
     const tabs = (await chrome.tabs.query({})).filter(tab => httpURL(tab.url)).map(tab => ({ id: tab.id, title: tab.title, url: tab.url, active: tab.active }));
@@ -198,9 +273,12 @@ async function handle(message, sender) {
     return content(recording.tabId, { type: "MARK_SUCCESS" });
   }
   if (message.type === "DRAFT") {
-    const recording = (await read()).recordings.find(item => item.id === message.id);
+    const state = await read();
+    const recording = state.recordings.find(item => item.id === message.id);
     if (!recording || recording.status === "recording") throw new Error("Stop the recording before creating its draft.");
-    return { workflow: draftWorkflow(recording) };
+    const comparison = message.comparisonId ? state.recordings.find(item => item.id === message.comparisonId) : null;
+    if (message.comparisonId && (!comparison || comparison.status === "recording" || comparison.id === recording.id)) throw new Error("Choose a different, stopped demonstration to compare.");
+    return { workflow: createTeachingDraft(recording, comparison) };
   }
   if (message.type === "SAVE_WORKFLOW") {
     const errors = validateBrowserRun(message.workflow);
@@ -209,8 +287,10 @@ async function handle(message, sender) {
       const state = await read(); const workflow = clone(message.workflow);
       const existing = state.workflows.find(item => item.id === workflow.id);
       workflow.revision = existing ? existing.revision + 1 : 1;
+      delete workflow.verification;
+      state.verifications ||= {}; delete state.verifications[workflow.id];
       state.workflows = [workflow, ...state.workflows.filter(item => item.id !== workflow.id)].slice(0, 50);
-      await save({ workflows: state.workflows }); return { workflow };
+      await save({ workflows: state.workflows, verifications: state.verifications }); return { workflow };
     });
   }
   if (message.type === "RUN") return runWorkflow(message);
@@ -229,4 +309,19 @@ chrome.tabs.onRemoved.addListener(tabId => {
     const recording = recordingNow(state);
     if (recording?.tabId === tabId) { recording.status = "stopped"; recording.warnings.push("The recording tab was closed."); await save({ recordings: state.recordings }); await chrome.action.setBadgeText({ text: "" }); }
   });
+});
+
+for (const [event, source] of [["onCommitted", "document"], ["onHistoryStateUpdated", "history"], ["onReferenceFragmentUpdated", "fragment"]]) {
+  chrome.webNavigation[event].addListener(details => { void recordNavigation(details, source).catch(() => {}); });
+}
+chrome.webNavigation.onCreatedNavigationTarget.addListener(details => {
+  if (details.sourceFrameId !== 0) return;
+  void serial(async () => {
+    const state = await read(), recording = recordingNow(state);
+    if (!recording || recording.tabId !== details.sourceTabId) return;
+    recording.status = "stopped";
+    recording.warnings.push("Recording stopped: the task opened another tab or window. New-tab workflows are not supported by this runner.");
+    await save({ recordings: state.recordings }); await chrome.action.setBadgeText({ text: "" });
+    return recording.tabId;
+  }).then(tabId => { if (tabId !== undefined) return content(tabId, { type: "HALT" }); }).catch(() => {});
 });
