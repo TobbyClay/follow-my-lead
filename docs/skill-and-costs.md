@@ -25,4 +25,4 @@ After review, the extension can perform the saved steps with new inputs and chec
 
 If the user asks the skill to run the task through connected browser tools, the host model can inspect the live page and adapt within the request. This uses the host's model allowance. The current extension cannot silently call that model or launch new Codex tasks; automatic handoff, unattended adaptive runs, scheduling, and standalone API execution would be additional work.
 
-The Chrome recorder and host browser connection are distinct components. The former collects demonstrations; the latter gives an invoked agent browser tools. Future desktop support adds another execution adapter while preserving the workflow model.
+The Chrome recorder and host browser connection are distinct components. The former collects demonstrations; the latter gives an invoked agent browser tools.

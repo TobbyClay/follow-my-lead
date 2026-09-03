@@ -2,7 +2,7 @@
 
 A workflow is JSON with `schemaVersion: 1`, `kind: "workflow"`, a safe identifier `id`, positive integer `revision`, `name`, `goal`, `contexts`, `inputs`, and ordered `steps`. The first step is `navigate`; the last is `assertText` or `assertValue`. The implemented validator is `extension/core/workflow.js` in the project root.
 
-Use `contexts: { "main": { "adapter": "browser", "origin": "https://example.com" } }`. Origin is exact: scheme, host, and optional port, with no trailing slash. This extension supports one origin and one tab per run. Native applications require a future adapter.
+Use `contexts: { "main": { "adapter": "browser", "origin": "https://example.com" } }`. Origin is exact: scheme, host, and optional port, with no trailing slash. This extension supports one origin and one tab per run.
 
 Inputs are an object of named definitions, e.g. `customerName: { "type": "string", "default": "Maya", "required": true }`. Types are string and boolean. A step's `value` is a literal or exactly `{ "input": "customerName" }`; template strings are not interpolated. An absent default means the caller must supply a value. Do not put credentials in inputs.
 

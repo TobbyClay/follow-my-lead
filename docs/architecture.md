@@ -2,23 +2,21 @@
 
 Status: Chrome prototype implemented, 2026-09-03. This document describes the broader design. The current concrete JSON contract is documented in the project skill's [workflow format](../.agents/skills/follow-my-lead/references/workflow-format.md); the earlier illustrative contract below is not the implemented schema.
 
-The pilot uses a Chrome extension, a portable core in `extension/core/`, and a DOM adapter in `extension/browser/`. Its service worker coordinates recording and replay and persists action intent before dispatch. AI learning is supplied by the host through the project skill. There is no direct model API backend, desktop adapter, or automatic model recovery in the extension.
+The pilot uses a Chrome extension, a portable core in `extension/core/`, and a DOM adapter in `extension/browser/`. Its service worker coordinates recording and replay and persists action intent before dispatch. AI learning is supplied by the host through the project skill. There is no direct model API backend or automatic model recovery in the extension.
 
 ## One core with environment adapters
 
-The core owns the teaching and execution process. Adapters supply observations and perform actions in particular environments. Chrome is the first adapter; Windows desktop is the second. A desktop workflow may use both.
+The core owns the teaching and execution process. The browser adapter supplies observations and performs actions in Chrome, keeping browser-specific operations separate from workflow data and input logic.
 
 ```text
 Demonstrate -> Review learned steps -> Save workflow -> Run -> Check outcome
                          Shared workflow core
                                   |
-                     +------------+------------+
-                     |                         |
-                Browser adapter          Windows adapter
-                Chrome websites          Native applications
+                           Browser adapter
+                           Chrome websites
 ```
 
-The shared core must not depend on the DOM, Chrome extension APIs, Playwright objects, Windows handles, or UI Automation objects. Platform observations cross the boundary as serializable data. Runtime handles stay inside adapters.
+The shared core must not depend on the DOM, Chrome extension APIs, or Playwright objects. Browser observations cross the boundary as serializable data. Runtime handles stay inside adapters.
 
 ## Shared concepts
 
@@ -74,11 +72,11 @@ The following illustrates a browser step. It is an example of the intended struc
 }
 ```
 
-The core understands the action, parameter, context, and condition. The browser adapter interprets `browser.label`. A Windows target might use an accessibility identifier and application binding instead. Locators are scoped to an application context and can have reviewed alternatives; absolute screen coordinates are insufficient as a durable target definition.
+The core understands the action, parameter, context, and condition. The browser adapter interprets `browser.label`. Locators are scoped to a website context and can have reviewed alternatives; absolute screen coordinates are insufficient as a durable target definition.
 
-Portability means the workflow engine and format support multiple environments. It does not mean that browser locators automatically work in a native application. Supporting the same business operation in a different application requires its own bindings or demonstrated steps.
+The workflow format keeps browser-driver details separate from the task definition. Supporting the same operation on a different website requires its own bindings or demonstrated steps.
 
-Steps can expose typed outputs such as text, a table, or a file reference. Later steps consume those outputs through references rather than embedding platform-specific objects. This preserves a route from browser downloads to desktop file processing.
+Steps can expose typed outputs such as text, a table, or a file reference. Later steps consume those outputs through references rather than embedding browser-specific objects.
 
 ## Adapter contract
 
@@ -93,7 +91,7 @@ Each adapter reports its version and capabilities and implements these operation
 | Verify | Evaluate the expected application state within a bounded timeout |
 | Stop | Cancel queued work and report whether an already dispatched action has completed |
 
-Before a run, the core checks that available adapters support its required capabilities. Missing desktop support is reported before a mixed workflow starts. An application change can still cause a runtime failure, which must be reported accurately.
+Before a run, the core checks that the available browser adapter supports its required capabilities. Unsupported workflows are rejected before execution. A website change can still cause a runtime failure, which must be reported accurately.
 
 An ambiguous or missing target pauses the run. The runner does not blindly repeat an action whose result is unknown: it checks the resulting state first, particularly for submissions and file operations. Outcome checks are separate from successful dispatch of an input event.
 
@@ -103,15 +101,7 @@ Use a Chrome extension to collect page structure and demonstrated interaction ev
 
 The first spike implements extension-based DOM execution in the current Chrome profile, with a new tab for each run. Site access is requested for the selected host, with exact-origin checks in the workflow and adapter. Dynamically registered scripts reconnect on same-site page loads. Synthetic DOM interactions are sufficient for the practice fixture; sites requiring trusted input will need a different driver. Live Chrome compatibility is still to be checked. Injecting content scripts alone is not evidence that all browser interactions can be replayed.
 
-Keep any local browser runner separate from the shared workflow model. The final transport choice should not dictate the workflow format or require native desktop control for users who only use browser workflows.
-
-## Desktop delivery
-
-Add a companion application that runs in the signed-in Windows user session. Its adapter uses Windows UI Automation where applications expose controls and adds screen-based targeting for applications that need it. Desktop work also introduces window focus, display scaling, file dialogs, and coordination of mouse and keyboard access.
-
-Chrome native messaging is a possible bridge between the extension and the installed companion. It requires a registered native host; a Chrome extension alone does not become a general desktop controller. Transport details remain outside the workflow format.
-
-An application exposing little accessibility information will need more visual interpretation and targeted compatibility work. Protected operating-system surfaces are outside ordinary automation scope. Windows is the first desktop target; macOS and Linux would need their own adapters.
+Keep any local browser runner separate from the shared workflow model. The final transport choice should not dictate the workflow format.
 
 ## Data boundaries
 
@@ -121,5 +111,3 @@ Record only during a visible teaching session. Keep recordings and run artifacts
 
 - [Chrome activeTab permissions](https://developer.chrome.com/docs/extensions/develop/concepts/activeTab)
 - [Chrome content scripts](https://developer.chrome.com/docs/extensions/reference/manifest/content-scripts)
-- [Chrome native messaging](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging)
-- [Windows UI Automation](https://learn.microsoft.com/en-us/windows/win32/winauto/entry-uiauto-win32)

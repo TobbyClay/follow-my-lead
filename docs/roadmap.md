@@ -1,16 +1,16 @@
 # Delivery roadmap
 
-Browser support is the first usable release. Desktop support is the second product level. Both use the shared architecture from the outset. The initial Chrome implementation and local tests now exist; real Chrome acceptance and a user-selected real workflow remain outstanding. Later stages below are planned.
+The roadmap focuses on teaching and reliably replaying Chrome workflows. The initial implementation and local tests now exist; real Chrome acceptance and a user-selected real workflow remain outstanding. Later stages below are planned.
 
-## 0. Foundation
+## Foundation
 
-Completed: document the two levels, implement a versioned workflow model and validator, and separate browser-specific recording and DOM execution from shared data and input logic.
+Completed: implement a versioned workflow model and validator, and separate browser-specific recording and DOM execution from shared data and input logic.
 
-A desktop-shaped fixture verifies capability rejection by the Chrome runner. It validates the core boundary only; it does not establish Windows compatibility. The broader cross-adapter runner remains future work.
+Compatibility fixtures verify that the Chrome runner rejects unsupported capabilities before executing a workflow.
 
-Acceptance: the core can describe a browser-only workflow and a workflow containing browser and desktop steps. It rejects unavailable capabilities clearly before execution.
+Acceptance: the core can describe supported browser workflows and reject unavailable capabilities clearly before execution.
 
-## 1. Browser teaching and replay
+## Browser teaching and replay
 
 Implemented: extension recording, success markers, draft editing, reusable inputs, workflow import/export, a project skill for AI interpretation, and local replay with assertions. Local DOM and simulated transport tests pass. The current adapter uses synthetic DOM events and supports one origin and top-level tab. No direct AI API calls or browser model recovery are implemented.
 
@@ -31,30 +31,8 @@ Acceptance:
 - Pause with a useful explanation when a target is ambiguous or an expected state does not appear.
 - Report actual model usage when an API is used, providing a basis for cost estimates.
 
-## 2. Browser release
+## Browser release
 
 Extend the validated path to a small set of real workflows. Add workflow editing, input forms, a library, run history, cancellation, and recovery at known checkpoints. Add multi-tab and multi-site handling only as supported by the chosen session and permission model.
 
 Acceptance: publish the supported workflows and measured completion results across repeated trials, including changed inputs and realistic delays. Preserve saved workflows through schema changes or provide a documented migration.
-
-## 3. Windows desktop pilot
-
-Implement the Windows companion and adapter. Start with one native application whose controls can be inspected through UI Automation. Record a short task, review it through the shared teaching flow, and execute it through the shared runner.
-
-Deliver window binding, target resolution, text and pointer operations, state checks, and stop behavior. Add screen-based targeting only where required by the pilot, then test the relevant display layouts.
-
-Acceptance:
-
-- Complete the demonstrated native application workflow with a new input.
-- Verify behavior after moving and resizing the application window.
-- Identify missing controls and lost application context instead of continuing in the wrong window.
-- Keep existing browser workflows working through the same workflow core.
-- Establish a documented installation and update path for the companion.
-
-## 4. Workflows across applications
-
-Compose browser and Windows steps in one workflow. Use a concrete pilot such as downloading a report, opening it in a native application, performing a demonstrated operation, and returning a result to a browser task.
-
-Acceptance: pass typed data and file references between adapters, verify each application transition, and resume a paused workflow without duplicating completed effects.
-
-Grow desktop coverage through a compatibility matrix of tested applications and workflows. Broad coverage comes from additional adapters, targeting methods, and validation. Support for every desktop application is not a release promise.

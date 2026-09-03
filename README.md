@@ -4,25 +4,19 @@ Teach a repeatable task by demonstrating it, review what the system learned, and
 
 ## Product direction
 
-One product with two capability levels, delivered in order. Desktop support is an explicit project objective and shapes the shared design from the beginning. These levels describe capabilities, not subscription or pricing tiers.
+Follow My Lead helps users teach repeatable Chrome workflows by demonstrating them. The extension captures page structure and interaction events, while a Codex skill interprets the demonstration and turns it into reusable instructions.
 
-| | Level 1: Browser | Level 2: Desktop |
-| --- | --- | --- |
-| Initial environment | Chrome websites and browser workflows | Windows applications, files, and workflows that cross application boundaries |
-| User experience | Demonstrate, review, save, run | The same experience, extended to desktop applications |
-| Observation | Page structure, interaction events, selected screenshots | Accessibility information, window context, interaction events, selected screenshots |
-| Execution | Browser adapter | Windows adapter alongside the browser adapter |
-| Shared foundation | Workflow format, learning, parameters, library, execution state, outcome checks | Reuses the same foundation and browser workflows |
+The workflow is simple: demonstrate a task, review the learned steps, identify changing inputs, save it, and run it again with a verified result.
 
-For example, Level 1 could learn how to filter a web report and download the result. Level 2 could extend that workflow to open the downloaded file in a desktop application, perform a demonstrated transformation, and return to the browser.
+For example, demonstrate how to find a customer in a web directory, make the customer name an input, and repeat the task for another customer.
 
-Both levels aim to learn reusable operations and their outcomes. A demonstration is the starting point; the user can correct inferred steps and identify which values should change between runs.
+A demonstration is the starting point; users can correct inferred steps and define the result that proves a run succeeded.
 
 ## Current status
 
 The first Chrome prototype is implemented: a Manifest V3 extension records demonstrations, drafts and edits parameterized workflows, imports AI-authored workflows, and replays them with a final success check. A project skill lets Codex interpret recordings using the host's model. The extension itself makes no AI API calls.
 
-The code is verified with local DOM and simulated Chrome-transport tests. Installation, permissions, and real-site behavior still need a live Chrome check. Desktop control and automatic model recovery inside the extension remain future work.
+The code is verified with local DOM and simulated Chrome-transport tests. Installation, permissions, and real-site behavior still need a live Chrome check. Automatic model recovery inside the extension remains future work.
 
 ## Try it
 
@@ -57,7 +51,7 @@ Supported: one website origin, one top-level tab, standard HTML inputs and selec
 
 The adapter dispatches DOM interactions. Sites requiring trusted OS input, embedded cross-origin frames, shadow DOM controls, canvas interfaces, native file dialogs, or new-tab flows may need a different browser driver. Such compatibility has not been established. Keep authentication outside recordings; detected sensitive fields are excluded, and resulting learning gaps block replay.
 
-Unexpected states stop replay. Model-based recovery, branching/loops in the local runner, scheduling, multi-application workflows, and desktop control are not implemented.
+Unexpected states stop replay. Model-based recovery, branching/loops in the local runner, and scheduling are not implemented.
 
 ## Development
 
@@ -89,10 +83,10 @@ Draft output files and skill export destinations must be new; commands do not ov
 
 ## Design commitments
 
-- Keep browser and Windows APIs inside their respective adapters.
+- Keep browser APIs inside the execution adapter.
 - Save versioned workflows whose steps identify their application context explicitly.
 - Keep observed evidence separate from the reviewed, executable workflow.
-- Preserve browser workflows when desktop support is introduced.
+- Preserve saved workflows through versioned format changes.
 - Add application-specific capabilities without forcing every adapter to support them.
 - Measure success by the resulting application state, not merely by whether clicks were dispatched.
-- Treat broad desktop compatibility as a progressively tested capability; never promise support for every application.
+- Describe website compatibility through tested workflows and verified outcomes.
