@@ -1,0 +1,8 @@
+node_modules/
+artifacts/
+recordings/
+workflows/
+*.log
+.env
+.env.*
+!.env.example

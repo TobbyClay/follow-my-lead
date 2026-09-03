@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Follow My Lead",
+  "version": "0.1.0",
+  "description": "Record a Chrome task, teach it as a skill, and replay a reviewed workflow with new inputs.",
+  "minimum_chrome_version": "120",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "action": { "default_title": "Follow My Lead", "default_popup": "ui/control.html" },
+  "background": { "service_worker": "background.js", "type": "module" },
+  "options_page": "ui/control.html"
+}

@@ -1,0 +1,19 @@
+{
+  "name": "follow-my-lead",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Learn reusable Chrome workflows from demonstrations, with a subscription-backed skill.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "demo": "node scripts/demo-server.mjs",
+    "validate": "node scripts/fml.mjs validate",
+    "check": "node scripts/check.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0"
+  }
+}

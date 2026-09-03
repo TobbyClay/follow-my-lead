@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Follow My Lead</title><link rel="stylesheet" href="control.css">
+</head>
+<body>
+  <header><div class="brand"><span class="mark">↗</span><div><h1>Follow My Lead</h1><p>A task worth teaching once.</p></div></div><button id="open" class="quiet" title="Open full workspace">Expand ↗</button></header>
+  <main>
+    <div class="intro"><span class="eyebrow">CHROME · EARLY PROTOTYPE</span><h2>Show it. Shape it. Run it.</h2><p>Capture a task, turn it into a skill, and put the repeat work on autopilot.</p></div>
+    <div id="notice" role="status" aria-live="polite" hidden></div>
+    <div class="columns">
+      <section class="card"><div class="section-head"><span class="number">01</span><h2>Teach a task</h2><span id="record-status" class="badge">Ready</span></div>
+        <label for="task-name">Task name</label><input id="task-name" placeholder="Find a customer">
+        <label for="goal">What should a successful run accomplish?</label><textarea id="goal" rows="2" placeholder="Find the requested customer and show their contact details."></textarea>
+        <label for="target-tab">Website tab</label><select id="target-tab"></select>
+        <div class="actions"><button id="start" class="primary">● Start teaching</button><button id="mark-success" disabled>Mark success</button><button id="stop" disabled>Stop</button></div>
+        <p class="hint">After completing the task, choose <b>Mark success</b> and click the result that proves it worked. Then stop recording.</p>
+        <p class="hint">Capture stays on your device. Text you enter is recorded, except detected sensitive fields. Sign in before you start.</p>
+        <div id="live-events" class="event-list" aria-live="polite"></div>
+      </section>
+      <section class="card"><div class="section-head"><span class="number">02</span><h2>Learn & review</h2></div>
+        <label for="recordings">Demonstration</label><select id="recordings"></select>
+        <div class="actions"><button id="draft">Create local draft</button><button id="export-recording">Export for AI</button><button id="copy-prompt">Copy teaching prompt</button></div>
+        <p class="hint">A local draft organizes the recorded actions. For AI interpretation, attach the exported recording in Codex and use <b>$follow-my-lead</b>. Import its workflow below.</p>
+        <div class="import-row"><label class="file-button" for="import-workflow">Import workflow JSON</label><input id="import-workflow" type="file" accept=".json,application/json"><span id="learning-method" class="subtle"></span></div>
+        <div id="editor" hidden>
+          <label for="workflow-name">Workflow name</label><input id="workflow-name">
+          <label for="workflow-goal">Goal</label><textarea id="workflow-goal" rows="2"></textarea>
+          <p class="hint">Mark a demonstrated value as an input to change it on each run. Review the final success check carefully.</p>
+          <ol id="steps" class="steps"></ol>
+          <div id="validation" class="validation" role="status"></div>
+          <label class="check-row"><input id="reviewed" type="checkbox"> I reviewed the steps, inputs, and success check.</label>
+          <div class="actions"><button id="save" class="primary">Save task</button><button id="export-workflow">Export workflow</button></div>
+          <details><summary>Edit workflow JSON</summary><textarea id="json-editor" rows="12" spellcheck="false" aria-label="Workflow JSON"></textarea><button id="apply-json">Apply JSON</button></details>
+        </div>
+      </section>
+      <section class="card run-card"><div class="section-head"><span class="number">03</span><h2>Run a learned task</h2><span class="badge">No API key</span></div>
+        <label for="workflows">Saved task</label><select id="workflows"></select>
+        <div id="run-inputs"></div>
+        <div class="actions"><button id="run" class="primary">Run in a new tab →</button><button id="edit-saved">Edit task</button><button id="stop-run">Stop run</button></div>
+        <p class="hint">Replay uses your current Chrome sign-in and saved instructions. It checks the result and stops on an unexpected state. Automatic AI recovery is not enabled.</p>
+        <div id="run-result" role="status" aria-live="polite"></div>
+      </section>
+    </div>
+    <footer>Local recording · Reusable inputs · Verified outcomes <span>0.1 / Chrome pilot</span></footer>
+  </main>
+  <script type="module" src="control.js"></script>
+</body>
+</html>

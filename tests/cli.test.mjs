@@ -1,0 +1,20 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+const root = fileURLToPath(new URL("../", import.meta.url));
+test("CLI validates a workflow and exports a usable skill without overwriting a destination", async () => {
+  const run = (...args) => spawnSync(process.execPath, ["scripts/fml.mjs", ...args], { cwd: root, encoding: "utf8" });
+  const validated = run("validate", "examples/find-customer.workflow.json"); assert.equal(validated.status, 0, validated.stderr);
+  const temporary = await mkdtemp(path.join(tmpdir(), "fml-skill-test-"));
+  const destination = path.join(temporary, "find-customer");
+  const exported = run("export-skill", "examples/find-customer.workflow.json", destination);
+  assert.equal(exported.status, 0, exported.stderr);
+  const workflow = JSON.parse(await readFile(path.join(destination, "workflow.json"), "utf8"));
+  assert.equal(workflow.inputs.customerName.default, "Maya");
+  assert.match(await readFile(path.join(destination, "SKILL.md"), "utf8"), /name: find-customer/);
+  assert.notEqual(run("export-skill", "examples/find-customer.workflow.json", destination).status, 0);
+});
